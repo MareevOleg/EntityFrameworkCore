@@ -1,12 +1,36 @@
 // Copyright (c) .NET Foundation. All rights reserved.
 // Licensed under the Apache License, Version 2.0. See License.txt in the project root for license information.
 
+using System.Collections.Generic;
 using JetBrains.Annotations;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Metadata;
 
 namespace Microsoft.EntityFrameworkCore.Update
 {
+    public interface IModelDataTracker
+    {
+        IUpdateEntry GetPrincipal([NotNull] IUpdateEntry dependentEntry, [NotNull] IForeignKey foreignKey);
+
+        IEnumerable<IUpdateEntry> GetDependents([NotNull] IUpdateEntry principalEntry, [NotNull] IForeignKey foreignKey);
+
+        IUpdateEntry TryGetEntry([NotNull] IKey key, [NotNull] object[] keyValues);
+
+        IEnumerable<IUpdateEntry> Entries { get; }
+
+        void DetectChanges();
+
+        IList<IUpdateEntry> GetEntriesToSave();
+
+        IUpdateEntry CreateEntry([NotNull] IDictionary<string, object> values, [NotNull] IEntityType entityType);
+    }
+
+    public interface IModelDataTrackerFactory
+    {
+        IModelDataTracker Create(IModel model);
+    }
+
+
     /// <summary>
     ///     <para>
     ///         The information passed to a database provider to save changes to an entity to the database.
@@ -18,6 +42,10 @@ namespace Microsoft.EntityFrameworkCore.Update
     /// </summary>
     public interface IUpdateEntry
     {
+        void SetOriginalValue(IProperty property, object value);
+
+        void SetPropertyModified(IProperty property);
+
         /// <summary>
         ///     The type of entity to be saved to the database.
         /// </summary>
@@ -26,7 +54,7 @@ namespace Microsoft.EntityFrameworkCore.Update
         /// <summary>
         ///     The state of the entity to be saved.
         /// </summary>
-        EntityState EntityState { get; }
+        EntityState EntityState { get; set; }
 
         /// <summary>
         ///     The other entry that has the same key values, if one exists.

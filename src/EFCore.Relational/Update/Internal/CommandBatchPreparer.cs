@@ -36,7 +36,7 @@ namespace Microsoft.EntityFrameworkCore.Update.Internal
         private readonly IComparer<ModificationCommand> _modificationCommandComparer;
         private readonly IKeyValueIndexFactorySource _keyValueIndexFactorySource;
         private readonly int _minBatchSize;
-        private IStateManager _stateManager;
+        private IModelDataTracker _modelDataTracker;
         private readonly bool _sensitiveLoggingEnabled;
 
         private IReadOnlyDictionary<(string Schema, string Name), SharedTableEntryMapFactory<ModificationCommand>> _sharedTableEntryMapFactories;
@@ -63,7 +63,7 @@ namespace Microsoft.EntityFrameworkCore.Update.Internal
 
         private CommandBatchPreparerDependencies Dependencies { get; }
 
-        private IStateManager StateManager => _stateManager ?? (_stateManager = Dependencies.StateManager());
+        private IModelDataTracker ModelDataTracker => _modelDataTracker ?? (_modelDataTracker = Dependencies.ModelDataTracker());
 
         /// <summary>
         ///     This API supports the Entity Framework Core infrastructure and is not intended to be used
@@ -155,7 +155,7 @@ namespace Microsoft.EntityFrameworkCore.Update.Internal
             if (_sharedTableEntryMapFactories == null)
             {
                 _sharedTableEntryMapFactories = SharedTableEntryMap<ModificationCommand>
-                    .CreateSharedTableEntryMapFactories(entries[0].EntityType.Model, StateManager);
+                    .CreateSharedTableEntryMapFactories(entries[0].EntityType.Model, ModelDataTracker);
             }
 
             Dictionary<(string Schema, string Name), SharedTableEntryMap<ModificationCommand>> sharedTablesCommandsMap =
@@ -300,7 +300,7 @@ namespace Microsoft.EntityFrameworkCore.Update.Internal
                             continue;
                         }
 
-                        entry.SetEntityState(EntityState.Modified, modifyProperties: false);
+                        entry.EntityState = EntityState.Modified;
 
                         command.AddEntry(entry);
                         entries.Add(entry);

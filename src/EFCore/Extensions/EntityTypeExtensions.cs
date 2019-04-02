@@ -437,6 +437,15 @@ namespace Microsoft.EntityFrameworkCore
         }
 
         /// <summary>
+        ///    Gets the data stored in the model for the given entity type.
+        /// </summary>
+        /// <param name="entityType"> The entity type. </param>
+        /// <param name="providerValues"> If true, then provider values are used. </param>
+        /// <returns> The data. </returns>
+        public static IEnumerable<IDictionary<string, object>> GetData([NotNull] this IEntityType entityType, bool providerValues = false)
+            => entityType.AsEntityType().GetData(providerValues);
+
+        /// <summary>
         ///    Gets the LINQ expression filter automatically applied to queries for this entity type.
         /// </summary>
         /// <param name="entityType"> The entity type to get the query filter for. </param>
