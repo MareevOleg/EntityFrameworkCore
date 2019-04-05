@@ -23,7 +23,8 @@ namespace Microsoft.EntityFrameworkCore.Metadata.Conventions.Internal
         IEntityTypeMemberIgnoredConvention,
         IPropertyNullabilityChangedConvention,
         IPropertyFieldChangedConvention,
-        IPrincipalEndChangedConvention,
+        IForeignKeyPropertiesChangedConvention,
+        IForeignKeyPrincipalEndChangedConvention,
         IForeignKeyUniquenessChangedConvention,
         IForeignKeyRequirednessChangedConvention,
         IKeyAddedConvention,
@@ -598,6 +599,19 @@ namespace Microsoft.EntityFrameworkCore.Metadata.Conventions.Internal
 
                 return DiscoverProperties(relationshipBuilder);
             }
+        }
+
+        public InternalRelationshipBuilder Apply(
+            [NotNull] InternalRelationshipBuilder relationshipBuilder,
+            [NotNull] IReadOnlyList<Property> oldDependentProperties,
+            [NotNull] Key oldPrincipalKey)
+        {
+            if (relationshipBuilder.Metadata.Properties == oldDependentProperties)
+            {
+                return relationshipBuilder;
+            }
+
+            return Apply(relationshipBuilder);
         }
 
         /// <summary>

@@ -152,6 +152,8 @@ namespace Microsoft.EntityFrameworkCore.Metadata.Conventions.Infrastructure
             conventionSet.ForeignKeyRemovedConventions.Add(valueGeneratorConvention);
             conventionSet.ForeignKeyRemovedConventions.Add(foreignKeyIndexConvention);
 
+            conventionSet.ForeignKeyPropertiesChangedConventions.Add(foreignKeyPropertyDiscoveryConvention);
+
             conventionSet.ForeignKeyUniquenessChangedConventions.Add(foreignKeyPropertyDiscoveryConvention);
             conventionSet.ForeignKeyUniquenessChangedConventions.Add(keyDiscoveryConvention);
             conventionSet.ForeignKeyUniquenessChangedConventions.Add(foreignKeyIndexConvention);
@@ -197,7 +199,7 @@ namespace Microsoft.EntityFrameworkCore.Metadata.Conventions.Infrastructure
 
             conventionSet.IndexUniquenessChangedConventions.Add(foreignKeyIndexConvention);
 
-            conventionSet.PrincipalEndChangedConventions.Add(foreignKeyPropertyDiscoveryConvention);
+            conventionSet.ForeignKeyPrincipalEndChangedConventions.Add(foreignKeyPropertyDiscoveryConvention);
 
             conventionSet.PropertyNullabilityChangedConventions.Add(foreignKeyPropertyDiscoveryConvention);
 

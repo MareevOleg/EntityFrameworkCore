@@ -2167,8 +2167,8 @@ namespace Microsoft.EntityFrameworkCore.Metadata.Conventions.Internal
             var convention1 = new PrincipalEndChangedConvention(terminate: false);
             var convention2 = new PrincipalEndChangedConvention(terminate: true);
             var convention3 = new PrincipalEndChangedConvention(terminate: false);
-            conventions.PrincipalEndChangedConventions.Add(convention1);
-            conventions.PrincipalEndChangedConventions.Add(convention2);
+            conventions.ForeignKeyPrincipalEndChangedConventions.Add(convention1);
+            conventions.ForeignKeyPrincipalEndChangedConventions.Add(convention2);
             //conventions.PrincipalEndChangedConventions.Add(convention3); //TODO: See issue#8811
 
             var builder = new InternalModelBuilder(new Model(conventions));
@@ -2258,7 +2258,7 @@ namespace Microsoft.EntityFrameworkCore.Metadata.Conventions.Internal
             Assert.Empty(convention3.Calls);
         }
 
-        private class PrincipalEndChangedConvention : IPrincipalEndChangedConvention
+        private class PrincipalEndChangedConvention : IForeignKeyPrincipalEndChangedConvention
         {
             private readonly bool _terminate;
             public readonly List<object> Calls = new List<object>();

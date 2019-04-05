@@ -206,7 +206,7 @@ namespace Microsoft.EntityFrameworkCore.Metadata.Internal
                             continue;
                         }
 
-                        foreignKey.Builder.HasForeignKey(null, configurationSource);
+                        foreignKey.Builder.HasForeignKey((IReadOnlyList<Property>)null, configurationSource);
                     }
 
                     foreach (var actualProperty in actualProperties)
@@ -365,7 +365,7 @@ namespace Microsoft.EntityFrameworkCore.Metadata.Internal
         public virtual InternalPropertyBuilder Property(
             [NotNull] string propertyName,
             [NotNull] Type propertyType,
-            ConfigurationSource configurationSource)
+            ConfigurationSource? configurationSource)
             => Property(propertyName, propertyType, configurationSource, typeConfigurationSource: configurationSource);
 
         /// <summary>
@@ -375,7 +375,7 @@ namespace Microsoft.EntityFrameworkCore.Metadata.Internal
         public virtual InternalPropertyBuilder Property(
             [NotNull] string propertyName,
             [NotNull] Type propertyType,
-            ConfigurationSource configurationSource,
+            ConfigurationSource? configurationSource,
             ConfigurationSource? typeConfigurationSource)
             => Property(
                 propertyName, propertyType, memberInfo: null, configurationSource, typeConfigurationSource);
@@ -384,14 +384,14 @@ namespace Microsoft.EntityFrameworkCore.Metadata.Internal
         ///     This API supports the Entity Framework Core infrastructure and is not intended to be used
         ///     directly from your code. This API may change or be removed in future releases.
         /// </summary>
-        public virtual InternalPropertyBuilder Property([NotNull] string propertyName, ConfigurationSource configurationSource)
+        public virtual InternalPropertyBuilder Property([NotNull] string propertyName, ConfigurationSource? configurationSource)
             => Property(propertyName, propertyType: null, memberInfo: null, configurationSource, typeConfigurationSource: null);
 
         /// <summary>
         ///     This API supports the Entity Framework Core infrastructure and is not intended to be used
         ///     directly from your code. This API may change or be removed in future releases.
         /// </summary>
-        public virtual InternalPropertyBuilder Property([NotNull] MemberInfo clrProperty, ConfigurationSource configurationSource)
+        public virtual InternalPropertyBuilder Property([NotNull] MemberInfo clrProperty, ConfigurationSource? configurationSource)
             => Property(clrProperty.GetSimpleMemberName(), clrProperty.GetMemberType(), clrProperty, configurationSource, configurationSource);
 
         private InternalPropertyBuilder Property(
@@ -1405,9 +1405,7 @@ namespace Microsoft.EntityFrameworkCore.Metadata.Internal
                 return null;
             }
 
-            var removedForeignKey = Metadata.RemoveForeignKey(
-                foreignKey.Properties, foreignKey.PrincipalKey, foreignKey.PrincipalEntityType);
-
+            var removedForeignKey = Metadata.RemoveForeignKey(foreignKey);
             if (removedForeignKey == null)
             {
                 return null;
@@ -1415,7 +1413,7 @@ namespace Microsoft.EntityFrameworkCore.Metadata.Internal
 
             Debug.Assert(removedForeignKey == foreignKey);
 
-            RemoveShadowPropertiesIfUnused(foreignKey.Properties.Where(p => p.DeclaringEntityType.FindDeclaredProperty(p.Name) != null));
+            RemoveShadowPropertiesIfUnused(foreignKey.Properties);
             foreignKey.PrincipalKey.DeclaringEntityType.Builder?.RemoveKeyIfUnused(foreignKey.PrincipalKey);
 
             return currentConfigurationSource;
@@ -1550,22 +1548,11 @@ namespace Microsoft.EntityFrameworkCore.Metadata.Internal
 
         private static void RemovePropertyIfUnused(Property property)
         {
-            if (!property.DeclaringEntityType.Builder.CanRemoveProperty(property, ConfigurationSource.Convention))
-            {
-                return;
-            }
-
-            if (property.GetContainingIndexes().Any())
-            {
-                return;
-            }
-
-            if (property.GetContainingForeignKeys().Any())
-            {
-                return;
-            }
-
-            if (property.GetContainingKeys().Any())
+            if (property.Builder == null
+                || !property.DeclaringEntityType.Builder.CanRemoveProperty(property, ConfigurationSource.Convention)
+                || property.GetContainingIndexes().Any()
+                || property.GetContainingForeignKeys().Any()
+                || property.GetContainingKeys().Any())
             {
                 return;
             }
@@ -2492,84 +2479,126 @@ namespace Microsoft.EntityFrameworkCore.Metadata.Internal
         {
             using (var batch = ModelBuilder.Metadata.ConventionDispatcher.StartBatch())
             {
-                var principalType = principalEntityTypeBuilder.Metadata;
-                var principalBaseEntityTypeBuilder = principalType.RootType().Builder;
-                if (principalKey == null)
-                {
-                    principalKey = principalType.FindPrimaryKey();
-                    if (principalKey != null
-                        && dependentProperties != null)
-                    {
-                        if (!ForeignKey.AreCompatible(
-                            principalKey.Properties,
-                            dependentProperties,
-                            principalType,
-                            Metadata,
-                            shouldThrow: false))
-                        {
-                            if (dependentProperties.All(p => ConfigurationSource.Convention.Overrides(p.GetTypeConfigurationSource())
-                                    && p.IsShadowProperty()))
-                            {
-                                var detachedProperties = DetachProperties(dependentProperties);
-                                GetOrCreateProperties(dependentProperties.Select(p => p.Name).ToList(), configurationSource, principalKey.Properties, isRequired ?? false);
-                                detachedProperties.Attach(this);
-                            }
-                            else
-                            {
-                                principalKey = null;
-                            }
-                        }
-                        else if (Metadata.FindForeignKeysInHierarchy(dependentProperties, principalKey, principalType).Any())
-                        {
-                            principalKey = null;
-                        }
-                    }
-                }
-
-                if (dependentProperties != null)
-                {
-                    dependentProperties = GetActualProperties(dependentProperties, ConfigurationSource.Convention);
-                    if (principalKey == null)
-                    {
-                        var principalKeyProperties = principalBaseEntityTypeBuilder.TryCreateUniqueProperties(
-                            dependentProperties.Count, null, Enumerable.Repeat("", dependentProperties.Count), dependentProperties.Select(p => p.ClrType), isRequired: true, baseName: "TempId").Item2;
-
-                        var keyBuilder = principalBaseEntityTypeBuilder.HasKeyInternal(principalKeyProperties, ConfigurationSource.Convention);
-
-                        principalKey = keyBuilder.Metadata;
-                    }
-                    else
-                    {
-                        Debug.Assert(Metadata.FindForeignKey(dependentProperties, principalKey, principalType) == null);
-                    }
-                }
-                else
-                {
-                    if (principalKey == null)
-                    {
-                        var principalKeyProperties = principalBaseEntityTypeBuilder.TryCreateUniqueProperties(
-                            1, null, new[] { "TempId" }, new[] { typeof(int) }, isRequired: true, baseName: "").Item2;
-
-                        principalKey = principalBaseEntityTypeBuilder.HasKeyInternal(principalKeyProperties, ConfigurationSource.Convention).Metadata;
-                    }
-
-                    var baseName = string.IsNullOrEmpty(navigationToPrincipalName)
-                        ? principalType.ShortName()
-                        : navigationToPrincipalName;
-                    dependentProperties = CreateUniqueProperties(null, principalKey.Properties, isRequired ?? false, baseName);
-                }
-
-                var foreignKey = Metadata.AddForeignKey(
-                    dependentProperties, principalKey, principalType, componentConfigurationSource: null, configurationSource);
+                var foreignKey = SetOrAddForeignKey(null, principalEntityTypeBuilder,
+                    dependentProperties, principalKey, navigationToPrincipalName, isRequired, configurationSource);
                 if (isRequired.HasValue
                     && foreignKey.IsRequired == isRequired.Value)
                 {
                     foreignKey = foreignKey.SetIsRequired(isRequired.Value, configurationSource);
                 }
 
-                principalType.UpdateConfigurationSource(configurationSource);
+                return batch.Run(foreignKey)?.Builder;
+            }
+        }
+
+        /// <summary>
+        ///     This API supports the Entity Framework Core infrastructure and is not intended to be used
+        ///     directly from your code. This API may change or be removed in future releases.
+        /// </summary>
+        public virtual InternalRelationshipBuilder UpdateForeignKey(
+            [NotNull] ForeignKey foreignKey,
+            [CanBeNull] IReadOnlyList<Property> dependentProperties,
+            [CanBeNull] Key principalKey,
+            [CanBeNull] string navigationToPrincipalName,
+            bool? isRequired,
+            ConfigurationSource? configurationSource)
+        {
+            Debug.Assert(dependentProperties != null || principalKey != null);
+
+            using (var batch = ModelBuilder.Metadata.ConventionDispatcher.StartBatch())
+            {
+                var oldProperties = foreignKey.Properties;
+                var oldKey = foreignKey.PrincipalKey;
+                if (dependentProperties == null)
+                {
+                    var temporaryProperties = CreateUniqueProperties(null, principalKey.Properties, isRequired ?? false, "TempFk");
+                    foreignKey.SetProperties(temporaryProperties, principalKey, configurationSource);
+                    foreignKey.DeclaringEntityType.Builder.RemoveShadowPropertiesIfUnused(oldProperties);
+                    oldProperties = foreignKey.Properties;
+                }
+
+                foreignKey = SetOrAddForeignKey(foreignKey, foreignKey.PrincipalEntityType.Builder,
+                    dependentProperties, principalKey, navigationToPrincipalName, isRequired, configurationSource);
+
+                foreignKey.DeclaringEntityType.Builder.RemoveShadowPropertiesIfUnused(oldProperties);
+                oldKey.DeclaringEntityType.Builder.RemoveKeyIfUnused(foreignKey.PrincipalKey);
 
                 return batch.Run(foreignKey)?.Builder;
+            }
+        }
+
+        private ForeignKey SetOrAddForeignKey(
+            ForeignKey foreignKey,
+            InternalEntityTypeBuilder principalEntityTypeBuilder,
+            IReadOnlyList<Property> dependentProperties,
+            Key principalKey,
+            string navigationToPrincipalName,
+            bool? isRequired,
+            ConfigurationSource? configurationSource)
+        {
+            var principalType = principalEntityTypeBuilder.Metadata;
+            var principalBaseEntityTypeBuilder = principalType.RootType().Builder;
+            if (principalKey == null)
+            {
+                principalKey = principalType.FindPrimaryKey();
+                if (principalKey != null
+                    && dependentProperties != null)
+                {
+                    Debug.Assert(ForeignKey.AreCompatible(
+                        principalKey.Properties,
+                        dependentProperties,
+                        principalType,
+                        Metadata,
+                        shouldThrow: false));
+
+                    if (Metadata.FindForeignKeysInHierarchy(dependentProperties, principalKey, principalType).Any())
+                    {
+                        principalKey = null;
+                    }
+                }
+            }
+
+            if (dependentProperties != null)
+            {
+                dependentProperties = GetActualProperties(dependentProperties, ConfigurationSource.Convention);
+                if (principalKey == null)
+                {
+                    var principalKeyProperties = principalBaseEntityTypeBuilder.TryCreateUniqueProperties(
+                        dependentProperties.Count, null, Enumerable.Repeat("", dependentProperties.Count),
+                        dependentProperties.Select(p => p.ClrType), isRequired: true, baseName: "TempId").Item2;
+
+                    principalKey = principalBaseEntityTypeBuilder.HasKeyInternal(principalKeyProperties, ConfigurationSource.Convention).Metadata;
+                }
+                else
+                {
+                    Debug.Assert(Metadata.FindForeignKey(dependentProperties, principalKey, principalType) == null);
+                }
+            }
+            else
+            {
+                if (principalKey == null)
+                {
+                    var principalKeyProperties = principalBaseEntityTypeBuilder.TryCreateUniqueProperties(
+                        1, null, new[] { "TempId" }, new[] { typeof(int) }, isRequired: true, baseName: "").Item2;
+
+                    principalKey = principalBaseEntityTypeBuilder.HasKeyInternal(principalKeyProperties, ConfigurationSource.Convention).Metadata;
+                }
+
+                var baseName = string.IsNullOrEmpty(navigationToPrincipalName)
+                    ? principalType.ShortName()
+                    : navigationToPrincipalName;
+                dependentProperties = CreateUniqueProperties(null, principalKey.Properties, isRequired ?? false, baseName);
+            }
+
+            if (foreignKey == null)
+            {
+                return Metadata.AddForeignKey(
+                    dependentProperties, principalKey, principalType, componentConfigurationSource: null, configurationSource.Value);
+            }
+            else
+            {
+                foreignKey.SetProperties(dependentProperties, principalKey, configurationSource);
+                return foreignKey;
             }
         }
 
@@ -2795,7 +2824,8 @@ namespace Microsoft.EntityFrameworkCore.Metadata.Internal
         ///     This API supports the Entity Framework Core infrastructure and is not intended to be used
         ///     directly from your code. This API may change or be removed in future releases.
         /// </summary>
-        public virtual IReadOnlyList<Property> GetOrCreateProperties([CanBeNull] IEnumerable<MemberInfo> clrProperties, ConfigurationSource configurationSource)
+        public virtual IReadOnlyList<Property> GetOrCreateProperties(
+            [CanBeNull] IEnumerable<MemberInfo> clrProperties, ConfigurationSource? configurationSource)
         {
             if (clrProperties == null)
             {
